@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Sealed Vault — Pokémon Investment Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2/dist/quagga.min.js"></script>
+<style>
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-card: #1a1a26;
+  --bg-card-hover: #22222f;
+  --bg-input: #14141e;
+  --border: #2a2a3a;
+  --border-focus: #f0c040;
+  --text-primary: #e8e8f0;
+  --text-secondary: #8888a0;
+  --text-muted: #555570;
+  --accent: #f0c040;
+  --accent-dim: #f0c04020;
+  --green: #34d399;
+  --green-dim: #34d39920;
+  --red: #f87171;
+  --red-dim: #f8717120;
+  --blue: #60a5fa;
+  --blue-dim: #60a5fa20;
+  --orange: #fb923c;
+  --orange-dim: #fb923c20;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.app-header {
+  padding: 24px 32px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-secondary);
+}
+
+.logo {
+  font-family: 'Space Mono', monospace;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: -0.5px;
+}
+.logo span { color: var(--text-muted); font-weight: 400; }
+
+.header-actions { display: flex; gap: 8px; }
+
+.main-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px 32px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+
+.tab {
+  padding: 10px 20px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.2s;
+}
+.tab:hover { color: var(--text-primary); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: 'Space Mono', monospace;
+  margin-bottom: 8px;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: 'Space Mono', monospace;
+}
+.stat-value.positive { color: var(--green); }
+.stat-value.negative { color: var(--red); }
+.stat-value.orange { color: var(--orange); }
+
+.stat-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn:hover { background: var(--bg-card-hover); border-color: var(--text-muted); }
+
+.btn-accent { background: var(--accent); color: var(--bg-primary); border-color: var(--accent); }
+.btn-accent:hover { background: #e0b030; border-color: #e0b030; }
+
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+
+.btn-ghost { background: none; border-color: transparent; }
+.btn-ghost:hover { background: var(--bg-card); border-color: var(--border); }
+
+.btn-danger { color: var(--red); }
+.btn-danger:hover { background: var(--red-dim); border-color: var(--red); }
+
+.btn-scan { background: var(--accent); color: var(--bg-primary); border-color: var(--accent); font-weight: 600; }
+.btn-scan:hover { background: #e0b030; border-color: #e0b030; }
+
+.table-wrapper {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.table-title { font-weight: 600; font-size: 15px; }
+
+table { width: 100%; border-collapse: collapse; }
+
+th {
+  text-align: left;
+  padding: 12px 20px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: 'Space Mono', monospace;
+  border-bottom: 1px solid var(--border);
+  font-weight: 400;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+th:hover { color: var(--text-secondary); }
+th.sorted { color: var(--accent); }
+th .sort-arrow { font-size: 10px; margin-left: 4px; }
+th.no-sort { cursor: default; }
+th.no-sort:hover { color: var(--text-muted); }
+
+td {
+  padding: 14px 20px;
+  font-size: 14px;
+  border-bottom: 1px solid var(--border);
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--bg-card-hover); }
+
+.mono { font-family: 'Space Mono', monospace; font-size: 13px; }
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'Space Mono', monospace;
+}
+.badge-green { background: var(--green-dim); color: var(--green); }
+.badge-red { background: var(--red-dim); color: var(--red); }
+.badge-blue { background: var(--blue-dim); color: var(--blue); }
+.badge-yellow { background: var(--accent-dim); color: var(--accent); }
+.badge-orange { background: var(--orange-dim); color: var(--orange); }
+
+.backstock-bar { display: flex; align-items: center; gap: 8px; }
+.backstock-fill { width: 60px; height: 6px; background: var(--bg-input); border-radius: 3px; overflow: hidden; }
+.backstock-fill-inner { height: 100%; border-radius: 3px; transition: width 0.3s; }
+
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 100;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(4px);
+}
+.modal-overlay.active { display: flex; }
+
+.modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  width: 90%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.modal-title { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+
+.form-group { margin-bottom: 16px; }
+.form-label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 500; }
+
+.form-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.form-input:focus { border-color: var(--border-focus); }
+
+select.form-input {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238888a0' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+
+.search-input {
+  padding: 8px 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  outline: none;
+  width: 200px;
+  transition: border-color 0.15s;
+}
+.search-input:focus { border-color: var(--border-focus); }
+
+.filter-select {
+  padding: 8px 32px 8px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238888a0' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+.empty-state-icon { font-size: 48px; margin-bottom: 16px; }
+.empty-state-text { font-size: 15px; margin-bottom: 8px; color: var(--text-secondary); }
+.empty-state-sub { font-size: 13px; }
+
+.section { margin-bottom: 32px; }
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.toolbar-left { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 20px;
+  font-size: 13px;
+  z-index: 200;
+  transform: translateY(100px);
+  opacity: 0;
+  transition: all 0.3s;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+
+.tax-toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.tax-toggle-btn {
+  padding: 8px 14px;
+  background: var(--bg-input);
+  border: none;
+  color: var(--text-secondary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tax-toggle-btn.active { background: var(--accent-dim); color: var(--accent); }
+
+.scanner-viewport { position: relative; width: 100%; max-width: 400px; margin: 0 auto; border-radius: 12px; overflow: hidden; background: #000; }
+.scanner-viewport video { width: 100%; display: block; }
+.scanner-viewport canvas { display: none; }
+.scanner-guide { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; height: 40%; border: 2px solid var(--accent); border-radius: 8px; pointer-events: none; box-shadow: 0 0 0 9999px rgba(0,0,0,0.4); }
+.scanner-status { text-align: center; padding: 12px; font-size: 13px; color: var(--text-secondary); }
+.scanner-result { text-align: center; padding: 12px; font-family: 'Space Mono', monospace; font-size: 18px; color: var(--accent); }
+
+@media (max-width: 768px) {
+  .app-header { padding: 16px; }
+  .main-content { padding: 16px; }
+  .dashboard-grid { grid-template-columns: repeat(2, 1fr); }
+  .form-row, .form-row-3 { grid-template-columns: 1fr; }
+  .search-input { width: 100%; }
+  .toolbar { flex-direction: column; align-items: stretch; }
+  .toolbar-left { flex-direction: column; }
+  td, th { padding: 10px 12px; font-size: 12px; }
+}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="logo">SEALED VAULT <span>/ tracker</span></div>
+  <div class="header-actions">
+    <button class="btn btn-scan" onclick="openScanner()">⎘ Scan</button>
+    <button class="btn" onclick="importData()">↑ Import</button>
+    <button class="btn" onclick="exportData()">↓ Export</button>
+  </div>
+</header>
+
+<main class="main-content">
+  <div class="tabs">
+    <button class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">Dashboard</button>
+    <button class="tab" data-tab="inventory" onclick="switchTab('inventory')">Inventory</button>
+    <button class="tab" data-tab="transactions" onclick="switchTab('transactions')">Transactions</button>
+  </div>
+
+  <div id="tab-dashboard" class="tab-content">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <input class="search-input" id="dash-search" placeholder="Search holdings..." oninput="renderDashboard()">
+        <select class="filter-select" id="dash-category" onchange="renderDashboard()"><option value="all">All Categories</option></select>
+        <select class="filter-select" id="dash-set" onchange="renderDashboard()"><option value="all">All Sets</option></select>
+      </div>
+    </div>
+    <div class="dashboard-grid" id="dashboard-stats"></div>
+    <div class="section">
+      <div class="table-wrapper">
+        <div class="table-header"><span class="table-title">Portfolio Holdings</span></div>
+        <table>
+          <thead>
+            <tr id="holdings-thead">
+              <th data-sort="name" onclick="sortTable('holdings','name')">Product <span class="sort-arrow"></span></th>
+              <th data-sort="qty" onclick="sortTable('holdings','qty')">Qty <span class="sort-arrow"></span></th>
+              <th data-sort="avgCost" onclick="sortTable('holdings','avgCost')">Avg Cost <span class="sort-arrow"></span></th>
+              <th data-sort="market" onclick="sortTable('holdings','market')">Market <span class="sort-arrow"></span></th>
+              <th data-sort="unrealized" onclick="sortTable('holdings','unrealized')">Unrealized P&L <span class="sort-arrow"></span></th>
+              <th data-sort="backstock" onclick="sortTable('holdings','backstock')">Backstock <span class="sort-arrow"></span></th>
+            </tr>
+          </thead>
+          <tbody id="holdings-table"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-inventory" class="tab-content" style="display:none">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <input class="search-input" id="product-search" placeholder="Search products..." oninput="renderProducts()">
+        <select class="filter-select" id="inv-category" onchange="renderProducts()"><option value="all">All Categories</option></select>
+        <select class="filter-select" id="inv-set" onchange="renderProducts()"><option value="all">All Sets</option></select>
+      </div>
+      <button class="btn btn-accent" onclick="openModal('product')">+ Add Product</button>
+    </div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr id="products-thead">
+            <th data-sort="name" onclick="sortTable('products','name')">Product <span class="sort-arrow"></span></th>
+            <th data-sort="category" onclick="sortTable('products','category')">Category <span class="sort-arrow"></span></th>
+            <th data-sort="msrp" onclick="sortTable('products','msrp')">MSRP <span class="sort-arrow"></span></th>
+            <th data-sort="market" onclick="sortTable('products','market')">Market Price <span class="sort-arrow"></span></th>
+            <th data-sort="onHand" onclick="sortTable('products','onHand')">On Hand <span class="sort-arrow"></span></th>
+            <th data-sort="backstockTarget" onclick="sortTable('products','backstockTarget')">Backstock Target <span class="sort-arrow"></span></th>
+            <th data-sort="surplus" onclick="sortTable('products','surplus')">Surplus <span class="sort-arrow"></span></th>
+            <th class="no-sort"></th>
+          </tr>
+        </thead>
+        <tbody id="products-table"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tab-transactions" class="tab-content" style="display:none">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <input class="search-input" id="txn-search" placeholder="Search transactions..." oninput="renderTransactions()">
+        <select class="filter-select" id="txn-filter" onchange="renderTransactions()">
+          <option value="all">All Types</option><option value="buy">Buys</option><option value="sell">Sells</option><option value="open">Opened</option>
+        </select>
+        <select class="filter-select" id="txn-category" onchange="renderTransactions()"><option value="all">All Categories</option></select>
+        <select class="filter-select" id="txn-set" onchange="renderTransactions()"><option value="all">All Sets</option></select>
+      </div>
+      <button class="btn btn-accent" onclick="openModal('transaction')">+ Log Transaction</button>
+    </div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr id="txn-thead">
+            <th data-sort="date" onclick="sortTable('txn','date')">Date <span class="sort-arrow"></span></th>
+            <th data-sort="type" onclick="sortTable('txn','type')">Type <span class="sort-arrow"></span></th>
+            <th data-sort="product" onclick="sortTable('txn','product')">Product <span class="sort-arrow"></span></th>
+            <th data-sort="qty" onclick="sortTable('txn','qty')">Qty <span class="sort-arrow"></span></th>
+            <th data-sort="unitPrice" onclick="sortTable('txn','unitPrice')">Unit Price <span class="sort-arrow"></span></th>
+            <th data-sort="total" onclick="sortTable('txn','total')">Total <span class="sort-arrow"></span></th>
+            <th class="no-sort">Tax/Fees</th>
+            <th class="no-sort">Notes</th>
+            <th class="no-sort"></th>
+          </tr>
+        </thead>
+        <tbody id="transactions-table"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- PRODUCT MODAL -->
+<div class="modal-overlay" id="modal-product">
+  <div class="modal">
+    <div class="modal-title" id="product-modal-title">Add Product</div>
+    <input type="hidden" id="product-edit-id">
+    <div class="form-group">
+      <label class="form-label">Product Name</label>
+      <input class="form-input" id="product-name" placeholder="e.g. Prismatic Evolutions ETB">
+    </div>
+    <div class="form-group">
+      <label class="form-label">UPC / Barcode</label>
+      <div style="display:flex;gap:8px">
+        <input class="form-input" id="product-upc" placeholder="Scan or type barcode" style="flex:1">
+        <button type="button" class="btn btn-sm btn-scan" onclick="scanForProductField()">Scan</button>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <select class="form-input" id="product-category">
+          <option value="ETB">ETB</option><option value="Booster Box">Booster Box</option><option value="Booster Pack">Booster Pack</option>
+          <option value="Collection Box">Collection Box</option><option value="Tin">Tin</option><option value="Blister">Blister</option>
+          <option value="Bundle">Bundle</option><option value="UPC">UPC</option><option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Set / Series</label>
+        <input class="form-input" id="product-set" placeholder="e.g. Scarlet & Violet">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">MSRP ($)</label>
+        <input class="form-input" id="product-msrp" type="number" step="0.01" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Market Price ($)</label>
+        <input class="form-input" id="product-market" type="number" step="0.01" placeholder="0.00">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Backstock Target</label>
+      <input class="form-input" id="product-backstock" type="number" min="0" value="1" placeholder="1">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('product')">Cancel</button>
+      <button class="btn btn-accent" onclick="saveProduct()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- TRANSACTION MODAL -->
+<div class="modal-overlay" id="modal-transaction">
+  <div class="modal">
+    <div class="modal-title">Log Transaction</div>
+    <div class="form-row-3">
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <select class="form-input" id="txn-type" onchange="onTxnTypeChange()">
+          <option value="buy">Buy</option><option value="sell">Sell</option><option value="open">Opened</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Date</label>
+        <input class="form-input" id="txn-date" type="date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Product</label>
+        <select class="form-input" id="txn-product"></select>
+      </div>
+    </div>
+    <div class="form-row" id="txn-price-row">
+      <div class="form-group">
+        <label class="form-label">Quantity</label>
+        <input class="form-input" id="txn-qty" type="number" min="1" value="1">
+      </div>
+      <div class="form-group" id="txn-price-group">
+        <label class="form-label">Unit Price ($)</label>
+        <input class="form-input" id="txn-price" type="number" step="0.01" placeholder="0.00">
+      </div>
+    </div>
+    <div id="txn-costs-section">
+      <div class="form-group">
+        <label class="form-label">Tax</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div class="tax-toggle">
+            <button type="button" class="tax-toggle-btn active" id="tax-mode-dollar" onclick="setTaxMode('dollar')">$</button>
+            <button type="button" class="tax-toggle-btn" id="tax-mode-pct" onclick="setTaxMode('pct')">%</button>
+          </div>
+          <input class="form-input" id="txn-tax" type="number" step="0.01" value="0" placeholder="0.00" style="flex:1" oninput="updateTaxPreview()">
+          <span id="tax-preview" class="mono" style="font-size:12px;color:var(--text-muted);min-width:70px"></span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Other Fees ($) — shipping, platform fees, etc.</label>
+        <input class="form-input" id="txn-fees" type="number" step="0.01" value="0" placeholder="0.00">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes (optional)</label>
+      <input class="form-input" id="txn-notes" placeholder="e.g. eBay sale, Target pickup, VM">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('transaction')">Cancel</button>
+      <button class="btn btn-accent" onclick="saveTransaction()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM DELETE PRODUCT -->
+<div class="modal-overlay" id="modal-confirm-delete">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-title">Delete Product</div>
+    <p style="color:var(--text-secondary);font-size:14px;margin-bottom:8px">Delete <strong id="confirm-delete-name"></strong> and all its transactions?</p>
+    <p style="color:var(--text-muted);font-size:13px">This can't be undone.</p>
+    <div class="modal-actions">
+      <button class="btn" onclick="cancelDeleteProduct()">Cancel</button>
+      <button class="btn btn-danger" style="border-color:var(--red);background:var(--red-dim)" onclick="confirmDeleteProduct()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM DELETE TRANSACTION -->
+<div class="modal-overlay" id="modal-confirm-delete-txn">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-title">Delete Transaction</div>
+    <p style="color:var(--text-secondary);font-size:14px">Delete this transaction? This will affect your calculations.</p>
+    <div class="modal-actions">
+      <button class="btn" onclick="cancelDeleteTransaction()">Cancel</button>
+      <button class="btn btn-danger" style="border-color:var(--red);background:var(--red-dim)" onclick="confirmDeleteTransaction()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- SCANNER MODAL -->
+<div class="modal-overlay" id="modal-scanner">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-title">Scan Barcode</div>
+    <div class="scanner-viewport" id="scanner-viewport"><div class="scanner-guide"></div></div>
+    <div class="scanner-status" id="scanner-status">Point camera at barcode...</div>
+    <div class="scanner-result" id="scanner-result"></div>
+    <div class="modal-actions"><button class="btn" onclick="closeScanner()">Cancel</button></div>
+  </div>
+</div>
+
+<!-- HIDDEN FILE INPUT -->
+<input type="file" id="file-import" accept=".json" style="display:none" onchange="handleImport(event)">
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ============ DATA STORE ============
+let state = { products: [], transactions: [] };
+
+// ============ SORT STATE ============
+let sortState = { holdings: { key: null, dir: 'asc' }, products: { key: null, dir: 'asc' }, txn: { key: null, dir: 'desc' } };
+
+// ============ TAX MODE ============
+let taxMode = 'dollar';
+
+function setTaxMode(mode) {
+  taxMode = mode;
+  document.getElementById('tax-mode-dollar').classList.toggle('active', mode === 'dollar');
+  document.getElementById('tax-mode-pct').classList.toggle('active', mode === 'pct');
+  document.getElementById('txn-tax').placeholder = mode === 'dollar' ? '0.00' : '0.0';
+  document.getElementById('txn-tax').value = '0';
+  updateTaxPreview();
+}
+
+function updateTaxPreview() {
+  const preview = document.getElementById('tax-preview');
+  if (taxMode === 'pct') {
+    const pct = parseFloat(document.getElementById('txn-tax').value) || 0;
+    const qty = parseInt(document.getElementById('txn-qty').value) || 0;
+    const price = parseFloat(document.getElementById('txn-price').value) || 0;
+    preview.textContent = `= ${fmt(qty * price * pct / 100)}`;
+  } else { preview.textContent = ''; }
+}
+
+function getComputedTax() {
+  const rawVal = parseFloat(document.getElementById('txn-tax').value) || 0;
+  if (taxMode === 'pct') {
+    const qty = parseInt(document.getElementById('txn-qty').value) || 0;
+    const price = parseFloat(document.getElementById('txn-price').value) || 0;
+    return Math.round((qty * price * rawVal / 100) * 100) / 100;
+  }
+  return rawVal;
+}
+
+function onTxnTypeChange() {
+  const type = document.getElementById('txn-type').value;
+  document.getElementById('txn-costs-section').style.display = type === 'open' ? 'none' : 'block';
+  document.getElementById('txn-price-group').style.display = type === 'open' ? 'none' : 'block';
+}
+
+function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 5); }
+
+// ============ PERSISTENCE ============
+function saveState() { localStorage.setItem('sealedvault_data', JSON.stringify(state)); }
+
+function loadState() {
+  const saved = localStorage.getItem('sealedvault_data');
+  if (saved) { try { state = JSON.parse(saved); } catch(e) { console.error('Failed to load:', e); } }
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `sealedvault_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Data exported');
+}
+
+function importData() { document.getElementById('file-import').click(); }
+
+function handleImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.products && data.transactions) {
+        state = data;
+        saveState();
+        renderAll();
+        showToast('Data imported successfully');
+      } else { showToast('Invalid file format'); }
+    } catch(err) { showToast('Error reading file'); }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// ============ FILTER HELPERS ============
+function getUniqueCategories() { return [...new Set(state.products.map(p => p.category))].sort(); }
+function getUniqueSets() { return [...new Set(state.products.map(p => p.set).filter(Boolean))].sort(); }
+
+function populateFilterDropdowns() {
+  const cats = getUniqueCategories(), sets = getUniqueSets();
+  ['dash-category', 'inv-category', 'txn-category'].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    const current = el.value;
+    el.innerHTML = '<option value="all">All Categories</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
+    if (cats.includes(current)) el.value = current;
+  });
+  ['dash-set', 'inv-set', 'txn-set'].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    const current = el.value;
+    el.innerHTML = '<option value="all">All Sets</option>' + sets.map(s => `<option value="${s}">${s}</option>`).join('');
+    if (sets.includes(current)) el.value = current;
+  });
+}
+
+// ============ CALCULATIONS ============
+function getProductHoldings(productId) {
+  const txns = state.transactions.filter(t => t.productId === productId);
+  let totalBought = 0, totalSold = 0, totalOpened = 0, totalBuyCost = 0, totalSellRevenue = 0;
+  let totalBuyFees = 0, totalSellFees = 0, totalBuyTax = 0, totalSellTax = 0;
+  txns.forEach(t => {
+    const tax = t.tax || 0, fees = t.fees || 0;
+    if (t.type === 'buy') { totalBought += t.qty; totalBuyCost += t.qty * t.unitPrice; totalBuyFees += fees; totalBuyTax += tax; }
+    else if (t.type === 'sell') { totalSold += t.qty; totalSellRevenue += t.qty * t.unitPrice; totalSellFees += fees; totalSellTax += tax; }
+    else if (t.type === 'open') { totalOpened += t.qty; }
+  });
+  const onHand = totalBought - totalSold - totalOpened;
+  const avgCost = totalBought > 0 ? (totalBuyCost + totalBuyFees + totalBuyTax) / totalBought : 0;
+  const realizedPL = totalSellRevenue - totalSellFees - totalSellTax - (totalSold * avgCost);
+  const hobbyCost = totalOpened * avgCost;
+  return { onHand, avgCost, totalBuyCost, totalBuyFees, totalBuyTax, totalSellRevenue, totalSellFees, totalSellTax, realizedPL, totalBought, totalSold, totalOpened, hobbyCost };
+}
+
+function getPortfolioStats(filteredProducts) {
+  const products = filteredProducts || state.products;
+  let totalInvested = 0, totalMarketValue = 0, totalRealizedPL = 0, totalUnits = 0, totalHobbyCost = 0;
+  products.forEach(p => {
+    const h = getProductHoldings(p.id);
+    totalInvested += h.onHand * h.avgCost;
+    totalMarketValue += h.onHand * (p.marketPrice || p.msrp || 0);
+    totalRealizedPL += h.realizedPL;
+    totalUnits += h.onHand;
+    totalHobbyCost += h.hobbyCost;
+  });
+  return { totalInvested, totalMarketValue, unrealizedPL: totalMarketValue - totalInvested, totalRealizedPL, totalUnits, totalHobbyCost };
+}
+
+// ============ SORTING ============
+function sortTable(table, key) {
+  const s = sortState[table];
+  if (s.key === key) { s.dir = s.dir === 'asc' ? 'desc' : 'asc'; } else { s.key = key; s.dir = 'asc'; }
+  const thead = document.getElementById(table + '-thead');
+  if (thead) {
+    thead.querySelectorAll('th').forEach(th => { th.classList.remove('sorted'); const a = th.querySelector('.sort-arrow'); if (a) a.textContent = ''; });
+    const activeTh = thead.querySelector(`th[data-sort="${key}"]`);
+    if (activeTh) { activeTh.classList.add('sorted'); const a = activeTh.querySelector('.sort-arrow'); if (a) a.textContent = s.dir === 'asc' ? '▲' : '▼'; }
+  }
+  if (table === 'holdings') renderDashboard(); else if (table === 'products') renderProducts(); else renderTransactions();
+}
+
+function applySortComparator(arr, table, getVal) {
+  const s = sortState[table]; if (!s.key) return arr;
+  const dir = s.dir === 'asc' ? 1 : -1;
+  return [...arr].sort((a, b) => { const va = getVal(a, s.key), vb = getVal(b, s.key); if (typeof va === 'string') return va.localeCompare(vb) * dir; return ((va||0) - (vb||0)) * dir; });
+}
+
+// ============ TABS ============
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
+  document.querySelectorAll('.tab-content').forEach(tc => tc.style.display = 'none');
+  document.getElementById(`tab-${tab}`).style.display = 'block';
+  renderAll();
+}
+
+// ============ MODALS ============
+function openModal(type, isEdit) {
+  document.getElementById(`modal-${type}`).classList.add('active');
+  if (type === 'transaction') { populateProductDropdown(); document.getElementById('txn-date').value = new Date().toISOString().slice(0, 10); setTaxMode('dollar'); onTxnTypeChange(); }
+  if (type === 'product' && !isEdit) { clearProductForm(); document.getElementById('product-modal-title').textContent = 'Add Product'; }
+}
+
+function closeModal(type) {
+  document.getElementById(`modal-${type}`).classList.remove('active');
+  if (type === 'product') clearProductForm();
+  if (type === 'transaction') clearTransactionForm();
+}
+
+function clearProductForm() {
+  ['product-name', 'product-set', 'product-msrp', 'product-market', 'product-upc'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('product-category').value = 'ETB';
+  document.getElementById('product-backstock').value = '1';
+  document.getElementById('product-edit-id').value = '';
+}
+
+function clearTransactionForm() {
+  document.getElementById('txn-type').value = 'buy';
+  document.getElementById('txn-qty').value = '1';
+  ['txn-price', 'txn-notes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('txn-fees').value = '0';
+  document.getElementById('txn-tax').value = '0';
+  setTaxMode('dollar'); onTxnTypeChange();
+}
+
+// ============ PRODUCT CRUD ============
+function saveProduct() {
+  const name = document.getElementById('product-name').value.trim();
+  if (!name) { showToast('Product name required'); return; }
+  const editId = document.getElementById('product-edit-id').value;
+  const data = {
+    name, upc: document.getElementById('product-upc').value.trim(),
+    category: document.getElementById('product-category').value,
+    set: document.getElementById('product-set').value.trim(),
+    msrp: parseFloat(document.getElementById('product-msrp').value) || 0,
+    marketPrice: parseFloat(document.getElementById('product-market').value) || 0,
+    backstockTarget: parseInt(document.getElementById('product-backstock').value) || 0,
+  };
+  if (editId) {
+    const idx = state.products.findIndex(p => p.id === editId);
+    if (idx >= 0) state.products[idx] = { ...state.products[idx], ...data };
+    showToast('Product updated');
+  } else {
+    state.products.push({ id: generateId(), ...data });
+    showToast('Product added');
+  }
+  saveState(); closeModal('product'); renderAll();
+}
+
+function editProduct(id) {
+  const p = state.products.find(pr => pr.id === id); if (!p) return;
+  document.getElementById('product-edit-id').value = p.id;
+  document.getElementById('product-modal-title').textContent = 'Edit Product';
+  document.getElementById('product-name').value = p.name;
+  document.getElementById('product-upc').value = p.upc || '';
+  document.getElementById('product-category').value = p.category;
+  document.getElementById('product-set').value = p.set || '';
+  document.getElementById('product-msrp').value = p.msrp || '';
+  document.getElementById('product-market').value = p.marketPrice || '';
+  document.getElementById('product-backstock').value = p.backstockTarget || 0;
+  openModal('product', true);
+}
+
+let pendingDeleteProduct = null;
+function deleteProduct(id) {
+  pendingDeleteProduct = id;
+  const p = state.products.find(pr => pr.id === id);
+  document.getElementById('confirm-delete-name').textContent = p ? p.name : 'this product';
+  document.getElementById('modal-confirm-delete').classList.add('active');
+}
+function confirmDeleteProduct() {
+  if (!pendingDeleteProduct) return;
+  state.products = state.products.filter(p => p.id !== pendingDeleteProduct);
+  state.transactions = state.transactions.filter(t => t.productId !== pendingDeleteProduct);
+  pendingDeleteProduct = null; saveState(); closeModal('confirm-delete'); renderAll(); showToast('Product deleted');
+}
+function cancelDeleteProduct() { pendingDeleteProduct = null; closeModal('confirm-delete'); }
+
+// ============ TRANSACTION CRUD ============
+function populateProductDropdown() {
+  const sel = document.getElementById('txn-product');
+  const sorted = [...state.products].sort((a, b) => a.name.localeCompare(b.name));
+  sel.innerHTML = sorted.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+}
+
+function saveTransaction() {
+  const productId = document.getElementById('txn-product').value;
+  if (!productId) { showToast('Add a product first'); return; }
+  const type = document.getElementById('txn-type').value;
+  const qty = parseInt(document.getElementById('txn-qty').value) || 0;
+  if (qty <= 0) { showToast('Quantity must be positive'); return; }
+  const unitPrice = type === 'open' ? 0 : (parseFloat(document.getElementById('txn-price').value) || 0);
+  if (type === 'sell' || type === 'open') {
+    const h = getProductHoldings(productId);
+    if (qty > h.onHand) { showToast(`Only ${h.onHand} on hand — can't ${type} ${qty}`); return; }
+  }
+  const tax = type === 'open' ? 0 : getComputedTax();
+  const fees = type === 'open' ? 0 : (parseFloat(document.getElementById('txn-fees').value) || 0);
+  state.transactions.push({
+    id: generateId(), productId, type,
+    date: document.getElementById('txn-date').value, qty, unitPrice, tax, fees,
+    notes: document.getElementById('txn-notes').value.trim(),
+  });
+  saveState(); closeModal('transaction'); renderAll();
+  showToast(`${{ buy: 'Purchase', sell: 'Sale', open: 'Opened' }[type]} logged`);
+}
+
+let pendingDeleteTxn = null;
+function deleteTransaction(id) { pendingDeleteTxn = id; document.getElementById('modal-confirm-delete-txn').classList.add('active'); }
+function confirmDeleteTransaction() {
+  if (!pendingDeleteTxn) return;
+  state.transactions = state.transactions.filter(t => t.id !== pendingDeleteTxn);
+  pendingDeleteTxn = null; saveState(); closeModal('confirm-delete-txn'); renderAll(); showToast('Transaction deleted');
+}
+function cancelDeleteTransaction() { pendingDeleteTxn = null; closeModal('confirm-delete-txn'); }
+
+// ============ RENDERING ============
+function fmt(n) { return '$' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+function fmtSigned(n) { return (n >= 0 ? '+' : '') + fmt(n); }
+
+function filterProducts(searchId, catId, setId) {
+  const search = (document.getElementById(searchId)?.value || '').toLowerCase();
+  const cat = document.getElementById(catId)?.value || 'all';
+  const set = document.getElementById(setId)?.value || 'all';
+  return state.products.filter(p => {
+    if (cat !== 'all' && p.category !== cat) return false;
+    if (set !== 'all' && p.set !== set) return false;
+    if (search && !p.name.toLowerCase().includes(search) && !(p.set||'').toLowerCase().includes(search) && !p.category.toLowerCase().includes(search) && !(p.upc||'').toLowerCase().includes(search)) return false;
+    return true;
+  });
+}
+
+function renderDashboard() {
+  const filtered = filterProducts('dash-search', 'dash-category', 'dash-set');
+  const stats = getPortfolioStats(filtered);
+  document.getElementById('dashboard-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total Invested</div><div class="stat-value mono">${fmt(stats.totalInvested)}</div><div class="stat-sub">${stats.totalUnits} units on hand</div></div>
+    <div class="stat-card"><div class="stat-label">Market Value</div><div class="stat-value mono">${fmt(stats.totalMarketValue)}</div></div>
+    <div class="stat-card"><div class="stat-label">Unrealized P&L</div><div class="stat-value mono ${stats.unrealizedPL >= 0 ? 'positive' : 'negative'}">${fmtSigned(stats.unrealizedPL)}</div><div class="stat-sub">${stats.totalInvested > 0 ? (stats.unrealizedPL / stats.totalInvested * 100).toFixed(1) : '0.0'}%</div></div>
+    <div class="stat-card"><div class="stat-label">Realized P&L</div><div class="stat-value mono ${stats.totalRealizedPL >= 0 ? 'positive' : 'negative'}">${fmtSigned(stats.totalRealizedPL)}</div><div class="stat-sub">From completed sales</div></div>
+    <div class="stat-card"><div class="stat-label">Total P&L</div><div class="stat-value mono ${(stats.unrealizedPL + stats.totalRealizedPL) >= 0 ? 'positive' : 'negative'}">${fmtSigned(stats.unrealizedPL + stats.totalRealizedPL)}</div></div>
+    <div class="stat-card"><div class="stat-label">Hobby Cost</div><div class="stat-value mono orange">${fmt(stats.totalHobbyCost)}</div><div class="stat-sub">Product opened for personal use</div></div>`;
+  const holdingsEl = document.getElementById('holdings-table');
+  let pwh = filtered.map(p => ({ ...p, holdings: getProductHoldings(p.id) })).filter(p => p.holdings.onHand > 0);
+  pwh = applySortComparator(pwh, 'holdings', (item, key) => {
+    const h = item.holdings, market = item.marketPrice || item.msrp || 0;
+    switch(key) { case 'name': return item.name.toLowerCase(); case 'qty': return h.onHand; case 'avgCost': return h.avgCost; case 'market': return market; case 'unrealized': return (market - h.avgCost) * h.onHand; case 'backstock': return h.onHand - item.backstockTarget; default: return 0; }
+  });
+  if (!pwh.length) { holdingsEl.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">No holdings match filters</div></div></td></tr>`; return; }
+  holdingsEl.innerHTML = pwh.map(p => {
+    const h = p.holdings, market = p.marketPrice || p.msrp || 0, unrealized = (market - h.avgCost) * h.onHand;
+    const backstockPct = p.backstockTarget > 0 ? Math.min(100, (h.onHand / p.backstockTarget) * 100) : 100;
+    const backstockMet = h.onHand >= p.backstockTarget, surplus = h.onHand - p.backstockTarget, barColor = backstockMet ? 'var(--green)' : 'var(--accent)';
+    return `<tr><td><strong>${p.name}</strong><br><span style="color:var(--text-muted);font-size:12px">${p.set||''}</span></td><td class="mono">${h.onHand}</td><td class="mono">${fmt(h.avgCost)}</td><td class="mono">${fmt(market)}</td><td><span class="badge ${unrealized >= 0 ? 'badge-green' : 'badge-red'}">${fmtSigned(unrealized)}</span></td><td><div class="backstock-bar"><div class="backstock-fill"><div class="backstock-fill-inner" style="width:${backstockPct}%;background:${barColor}"></div></div><span class="mono" style="font-size:12px;color:${backstockMet ? 'var(--green)' : 'var(--text-secondary)'}">${h.onHand}/${p.backstockTarget}</span>${surplus > 0 ? `<span class="badge badge-yellow">${surplus} surplus</span>` : ''}</div></td></tr>`;
+  }).join('');
+}
+
+function renderProducts() {
+  const filtered = filterProducts('product-search', 'inv-category', 'inv-set');
+  const tbody = document.getElementById('products-table');
+  let rows = filtered.map(p => { const h = getProductHoldings(p.id); return { ...p, onHand: h.onHand, surplus: h.onHand - p.backstockTarget }; });
+  rows = applySortComparator(rows, 'products', (item, key) => {
+    switch(key) { case 'name': return item.name.toLowerCase(); case 'category': return item.category.toLowerCase(); case 'msrp': return item.msrp; case 'market': return item.marketPrice||0; case 'onHand': return item.onHand; case 'backstockTarget': return item.backstockTarget; case 'surplus': return item.surplus; default: return 0; }
+  });
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-state-icon">🎴</div><div class="empty-state-text">${!state.products.length ? 'No products yet' : 'No matches'}</div></div></td></tr>`; return; }
+  tbody.innerHTML = rows.map(p => `<tr><td><strong>${p.name}</strong><br><span style="color:var(--text-muted);font-size:12px">${p.set||''}</span></td><td><span class="badge badge-blue">${p.category}</span></td><td class="mono">${fmt(p.msrp)}</td><td class="mono">${p.marketPrice ? fmt(p.marketPrice) : '—'}</td><td class="mono">${p.onHand}</td><td class="mono">${p.backstockTarget}</td><td>${p.surplus > 0 ? `<span class="badge badge-yellow">${p.surplus}</span>` : p.surplus === 0 ? `<span class="badge badge-green">met</span>` : `<span class="badge badge-red">${p.surplus}</span>`}</td><td><button class="btn btn-ghost btn-sm" onclick="editProduct('${p.id}')">edit</button> <button class="btn btn-sm btn-danger" style="border-color:var(--red)" onclick="deleteProduct('${p.id}')">delete</button></td></tr>`).join('');
+}
+
+function renderTransactions() {
+  const search = (document.getElementById('txn-search').value || '').toLowerCase();
+  const typeFilter = document.getElementById('txn-filter').value;
+  const catFilter = document.getElementById('txn-category').value;
+  const setFilter = document.getElementById('txn-set').value;
+  const tbody = document.getElementById('transactions-table');
+  let txns = [...state.transactions];
+  if (typeFilter !== 'all') txns = txns.filter(t => t.type === typeFilter);
+  if (catFilter !== 'all' || setFilter !== 'all') {
+    txns = txns.filter(t => { const p = state.products.find(pr => pr.id === t.productId); if (!p) return false; if (catFilter !== 'all' && p.category !== catFilter) return false; if (setFilter !== 'all' && p.set !== setFilter) return false; return true; });
+  }
+  if (search) { txns = txns.filter(t => { const p = state.products.find(pr => pr.id === t.productId); return (p && p.name.toLowerCase().includes(search)) || (t.notes||'').toLowerCase().includes(search); }); }
+  if (!sortState.txn.key) { txns.sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)); }
+  else { txns = applySortComparator(txns, 'txn', (item, key) => { switch(key) { case 'date': return item.date; case 'type': return item.type; case 'product': const p = state.products.find(pr => pr.id === item.productId); return p ? p.name.toLowerCase() : ''; case 'qty': return item.qty; case 'unitPrice': return item.unitPrice; case 'total': return item.qty * item.unitPrice; default: return 0; } }); }
+  if (!txns.length) { tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-text">No transactions match filters</div></div></td></tr>`; return; }
+  tbody.innerHTML = txns.map(t => {
+    const product = state.products.find(p => p.id === t.productId);
+    const total = t.qty * t.unitPrice, tax = t.tax||0, fees = t.fees||0;
+    const tf = []; if (tax > 0) tf.push(`tax ${fmt(tax)}`); if (fees > 0) tf.push(`fees ${fmt(fees)}`);
+    const typeBadge = t.type === 'buy' ? 'badge-blue' : t.type === 'sell' ? 'badge-green' : 'badge-orange';
+    return `<tr><td class="mono">${t.date}</td><td><span class="badge ${typeBadge}">${t.type}</span></td><td>${product ? product.name : 'Unknown'}</td><td class="mono">${t.qty}</td><td class="mono">${t.type === 'open' ? '—' : fmt(t.unitPrice)}</td><td class="mono">${t.type === 'open' ? '—' : fmt(total)}</td><td style="font-size:12px;color:var(--text-secondary)">${tf.length ? tf.join(', ') : '—'}</td><td style="color:var(--text-secondary);font-size:13px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.notes||'—'}</td><td><button class="btn btn-ghost btn-sm btn-danger" onclick="deleteTransaction('${t.id}')">×</button></td></tr>`;
+  }).join('');
+}
+
+function renderAll() { populateFilterDropdowns(); renderDashboard(); renderProducts(); renderTransactions(); }
+
+// ============ TOAST ============
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2500);
+}
+
+// ============ KEYBOARD ============
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
+});
+
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('active'); });
+});
+
+document.getElementById('txn-qty')?.addEventListener('input', updateTaxPreview);
+document.getElementById('txn-price')?.addEventListener('input', updateTaxPreview);
+
+// ============ BARCODE SCANNER ============
+let scannerCallback = null, scannerActive = false;
+
+function openScanner(callback) {
+  scannerCallback = callback || handleScannedBarcode;
+  document.getElementById('modal-scanner').classList.add('active');
+  document.getElementById('scanner-status').textContent = 'Starting camera...';
+  document.getElementById('scanner-result').textContent = '';
+  setTimeout(() => startScanner(), 100);
+}
+
+function closeScanner() { stopScanner(); document.getElementById('modal-scanner').classList.remove('active'); scannerCallback = null; }
+
+function startScanner() {
+  if (typeof Quagga === 'undefined') { document.getElementById('scanner-status').textContent = 'Scanner library not loaded.'; return; }
+  Quagga.init({
+    inputStream: { name: 'Live', type: 'LiveStream', target: document.getElementById('scanner-viewport'), constraints: { width: { min: 640 }, height: { min: 480 }, facingMode: 'environment' } },
+    decoder: { readers: ['upc_reader', 'ean_reader', 'ean_8_reader'] }, locate: true, frequency: 10
+  }, function(err) {
+    if (err) { document.getElementById('scanner-status').textContent = 'Camera access denied or unavailable.'; return; }
+    Quagga.start(); scannerActive = true;
+    document.getElementById('scanner-status').textContent = 'Point camera at barcode...';
+  });
+  Quagga.onDetected(onBarcodeDetected);
+}
+
+function stopScanner() { if (scannerActive) { Quagga.offDetected(onBarcodeDetected); Quagga.stop(); scannerActive = false; } }
+
+let scanBuffer = [];
+const SCAN_CONFIDENCE = 3;
+
+function onBarcodeDetected(result) {
+  const code = result.codeResult.code; if (!code) return;
+  scanBuffer.push(code); if (scanBuffer.length > 10) scanBuffer.shift();
+  const count = scanBuffer.filter(c => c === code).length;
+  if (count >= SCAN_CONFIDENCE) {
+    scanBuffer = [];
+    document.getElementById('scanner-result').textContent = code;
+    document.getElementById('scanner-status').textContent = 'Barcode detected!';
+    const cb = scannerCallback;
+    setTimeout(() => { closeScanner(); if (cb) cb(code); }, 500);
+  }
+}
+
+function normalizeUPC(code) { if (!code) return ''; return code.trim().replace(/^0+/, '') || '0'; }
+function findProductByUPC(code) { const n = normalizeUPC(code); return state.products.find(p => p.upc && normalizeUPC(p.upc) === n); }
+
+function handleScannedBarcode(code) {
+  const product = findProductByUPC(code);
+  if (product) { openModal('transaction'); document.getElementById('txn-product').value = product.id; showToast(`Found: ${product.name}`); }
+  else { openModal('product'); document.getElementById('product-upc').value = code; showToast('New barcode — add product details'); }
+}
+
+function scanForProductField() {
+  const currentData = {
+    editId: document.getElementById('product-edit-id').value, name: document.getElementById('product-name').value,
+    upc: document.getElementById('product-upc').value, category: document.getElementById('product-category').value,
+    set: document.getElementById('product-set').value, msrp: document.getElementById('product-msrp').value,
+    market: document.getElementById('product-market').value, backstock: document.getElementById('product-backstock').value,
+  };
+  document.getElementById('modal-product').classList.remove('active');
+  openScanner(function(code) {
+    const isEdit = !!currentData.editId;
+    openModal('product', isEdit);
+    document.getElementById('product-edit-id').value = currentData.editId;
+    if (isEdit) document.getElementById('product-modal-title').textContent = 'Edit Product';
+    document.getElementById('product-name').value = currentData.name;
+    document.getElementById('product-upc').value = code;
+    document.getElementById('product-category').value = currentData.category;
+    document.getElementById('product-set').value = currentData.set;
+    document.getElementById('product-msrp').value = currentData.msrp;
+    document.getElementById('product-market').value = currentData.market;
+    document.getElementById('product-backstock').value = currentData.backstock;
+    showToast(`Scanned: ${code}`);
+  });
+}
+
+// ============ INIT ============
+loadState();
+renderAll();
+</script>
+</body>
+</html>
