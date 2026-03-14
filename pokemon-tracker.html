@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Sealed Vault — Pokémon Investment Tracker</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2/dist/quagga.min.js"></script>
 <style>
 :root {
@@ -377,16 +378,140 @@ select.form-input {
   .toolbar-left { flex-direction: column; }
   td, th { padding: 10px 12px; font-size: 12px; }
 }
+
+/* Auth / Login Screen */
+.auth-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 20px;
+}
+.auth-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 40px;
+  width: 100%;
+  max-width: 400px;
+}
+.auth-card .logo {
+  font-family: 'Space Mono', monospace;
+  font-size: 22px;
+  color: var(--accent);
+  text-align: center;
+  margin-bottom: 8px;
+}
+.auth-card .auth-subtitle {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+.auth-card .form-group { margin-bottom: 16px; }
+.auth-card .form-input { width: 100%; }
+.auth-error {
+  color: var(--red);
+  font-size: 13px;
+  margin-bottom: 12px;
+  display: none;
+}
+.auth-error.show { display: block; }
+.auth-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+.auth-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: center;
+  padding: 4px;
+  font-family: inherit;
+}
+.auth-link:hover { text-decoration: underline; }
+.auth-loading {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 20px;
+  display: none;
+}
+.auth-loading.show { display: block; }
+
+/* Offline Banner */
+.offline-banner {
+  display: none;
+  background: var(--red-dim);
+  color: var(--red);
+  text-align: center;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--red);
+}
+.offline-banner.show { display: block; }
+
+/* Loading overlay for initial session check */
+.loading-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  color: var(--text-secondary);
+  font-size: 16px;
+}
 </style>
 </head>
 <body>
 
+<!-- LOADING SCREEN (shown while checking session) -->
+<div id="loading-screen" class="loading-screen">Loading...</div>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen" class="auth-screen" style="display:none">
+  <div class="auth-card">
+    <div class="logo">SEALED VAULT</div>
+    <div class="auth-subtitle">Sign in to sync your collection</div>
+    <div class="auth-error" id="auth-error"></div>
+    <div id="auth-form-login">
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" id="auth-email" type="email" placeholder="you@example.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" id="auth-password" type="password" placeholder="Your password">
+      </div>
+      <div class="auth-actions">
+        <button class="btn btn-accent" id="auth-signin-btn" onclick="handleSignIn()" style="width:100%">Sign In</button>
+        <button class="auth-link" onclick="handleForgotPassword()">Forgot password?</button>
+      </div>
+    </div>
+    <div id="auth-form-reset" style="display:none">
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" id="auth-reset-email" type="email" placeholder="you@example.com">
+      </div>
+      <div class="auth-actions">
+        <button class="btn btn-accent" onclick="handleSendReset()" style="width:100%">Send Reset Email</button>
+        <button class="auth-link" onclick="showLoginForm()">Back to sign in</button>
+      </div>
+    </div>
+    <div class="auth-loading" id="auth-loading">Signing in...</div>
+  </div>
+</div>
+
+<!-- OFFLINE BANNER -->
+<div class="offline-banner" id="offline-banner">You are offline. Changes are disabled until you reconnect.</div>
+
+<!-- MAIN APP (hidden until authenticated) -->
+<div id="app-container" style="display:none">
 <header class="app-header">
   <div class="logo">SEALED VAULT <span>/ tracker</span></div>
   <div class="header-actions">
     <button class="btn btn-scan" onclick="openScanner()">⎘ Scan</button>
     <button class="btn" onclick="importData()">↑ Import</button>
     <button class="btn" onclick="exportData()">↓ Export</button>
+    <button class="btn" onclick="handleSignOut()" style="color:var(--text-muted)">Sign Out</button>
   </div>
 </header>
 
@@ -638,7 +763,14 @@ select.form-input {
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
+</div><!-- /app-container -->
+
 <script>
+// ============ SUPABASE CONFIG ============
+const SUPABASE_URL = 'https://tdjdfxtooktyfyhxdtyn.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkamRmeHRvb2t0eWZ5aHhkdHluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5OTQ1MTgsImV4cCI6MjA4ODU3MDUxOH0.j_eE42nE1ErhYq0pBEnjcm2Knt1S6IdBewJmL7EpI4Q';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 // ============ DATA STORE ============
 let state = { products: [], transactions: [] };
 
@@ -685,14 +817,95 @@ function onTxnTypeChange() {
 
 function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 5); }
 
-// ============ PERSISTENCE ============
-function saveState() { localStorage.setItem('sealedvault_data', JSON.stringify(state)); }
+// ============ OFFLINE DETECTION ============
+function isOffline() { return !navigator.onLine; }
 
-function loadState() {
-  const saved = localStorage.getItem('sealedvault_data');
-  if (saved) { try { state = JSON.parse(saved); } catch(e) { console.error('Failed to load:', e); } }
+function updateOfflineBanner() {
+  document.getElementById('offline-banner').classList.toggle('show', isOffline());
 }
 
+window.addEventListener('online', updateOfflineBanner);
+window.addEventListener('offline', updateOfflineBanner);
+
+function checkOnline(action) {
+  if (isOffline()) {
+    showToast('You are offline — ' + (action || 'action') + ' blocked');
+    return false;
+  }
+  return true;
+}
+
+// ============ FIELD MAPPING: local <-> DB ============
+function productToDb(p) {
+  return {
+    id: p.id, name: p.name, upc: p.upc || null, category: p.category,
+    set_name: p.set || null, msrp: p.msrp || 0, market_price: p.marketPrice || 0,
+    backstock_target: p.backstockTarget || 0
+  };
+}
+
+function productFromDb(row) {
+  return {
+    id: row.id, name: row.name, upc: row.upc || '', category: row.category,
+    set: row.set_name || '', msrp: parseFloat(row.msrp) || 0,
+    marketPrice: parseFloat(row.market_price) || 0,
+    backstockTarget: parseInt(row.backstock_target) || 0
+  };
+}
+
+function txnToDb(t) {
+  return {
+    id: t.id, product_id: t.productId, type: t.type, date: t.date,
+    qty: t.qty, unit_price: t.unitPrice || 0, tax: t.tax || 0,
+    fees: t.fees || 0, notes: t.notes || null
+  };
+}
+
+function txnFromDb(row) {
+  return {
+    id: row.id, productId: row.product_id, type: row.type, date: row.date,
+    qty: parseInt(row.qty), unitPrice: parseFloat(row.unit_price) || 0,
+    tax: parseFloat(row.tax) || 0, fees: parseFloat(row.fees) || 0,
+    notes: row.notes || ''
+  };
+}
+
+// ============ SUPABASE PERSISTENCE ============
+async function loadStateFromSupabase() {
+  const { data: products, error: pErr } = await sb.from('products').select('*');
+  if (pErr) { console.error('Load products error:', pErr); showToast('Error loading products'); return; }
+  const { data: transactions, error: tErr } = await sb.from('transactions').select('*');
+  if (tErr) { console.error('Load transactions error:', tErr); showToast('Error loading transactions'); return; }
+  state.products = (products || []).map(productFromDb);
+  state.transactions = (transactions || []).map(txnFromDb);
+}
+
+async function dbInsertProduct(product) {
+  const { error } = await sb.from('products').insert(productToDb(product));
+  if (error) { console.error('Insert product error:', error); showToast('Error saving product'); }
+}
+
+async function dbUpdateProduct(product) {
+  const { error } = await sb.from('products').update(productToDb(product)).eq('id', product.id);
+  if (error) { console.error('Update product error:', error); showToast('Error updating product'); }
+}
+
+async function dbDeleteProduct(id) {
+  const { error } = await sb.from('products').delete().eq('id', id);
+  if (error) { console.error('Delete product error:', error); showToast('Error deleting product'); }
+}
+
+async function dbInsertTransaction(txn) {
+  const { error } = await sb.from('transactions').insert(txnToDb(txn));
+  if (error) { console.error('Insert txn error:', error); showToast('Error saving transaction'); }
+}
+
+async function dbDeleteTransaction(id) {
+  const { error } = await sb.from('transactions').delete().eq('id', id);
+  if (error) { console.error('Delete txn error:', error); showToast('Error deleting transaction'); }
+}
+
+// ============ EXPORT / IMPORT ============
 function exportData() {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -704,22 +917,38 @@ function exportData() {
   showToast('Data exported');
 }
 
-function importData() { document.getElementById('file-import').click(); }
+function importData() {
+  if (!checkOnline('import')) return;
+  document.getElementById('file-import').click();
+}
 
-function handleImport(event) {
+async function handleImport(event) {
   const file = event.target.files[0];
   if (!file) return;
+  if (!checkOnline('import')) { event.target.value = ''; return; }
   const reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = async function(e) {
     try {
       const data = JSON.parse(e.target.result);
-      if (data.products && data.transactions) {
-        state = data;
-        saveState();
-        renderAll();
-        showToast('Data imported successfully');
-      } else { showToast('Invalid file format'); }
-    } catch(err) { showToast('Error reading file'); }
+      if (!data.products || !data.transactions) { showToast('Invalid file format'); return; }
+      showToast('Importing data...');
+      // Upsert products
+      for (const p of data.products) {
+        const dbRow = productToDb(p);
+        const { error } = await sb.from('products').upsert(dbRow, { onConflict: 'id' });
+        if (error) console.error('Upsert product error:', error);
+      }
+      // Upsert transactions
+      for (const t of data.transactions) {
+        const dbRow = txnToDb(t);
+        const { error } = await sb.from('transactions').upsert(dbRow, { onConflict: 'id' });
+        if (error) console.error('Upsert txn error:', error);
+      }
+      // Reload from DB to get canonical state
+      await loadStateFromSupabase();
+      renderAll();
+      showToast('Data imported successfully');
+    } catch(err) { console.error('Import error:', err); showToast('Error reading file'); }
   };
   reader.readAsText(file);
   event.target.value = '';
@@ -835,7 +1064,8 @@ function clearTransactionForm() {
 }
 
 // ============ PRODUCT CRUD ============
-function saveProduct() {
+async function saveProduct() {
+  if (!checkOnline('save')) return;
   const name = document.getElementById('product-name').value.trim();
   if (!name) { showToast('Product name required'); return; }
   const editId = document.getElementById('product-edit-id').value;
@@ -849,13 +1079,18 @@ function saveProduct() {
   };
   if (editId) {
     const idx = state.products.findIndex(p => p.id === editId);
-    if (idx >= 0) state.products[idx] = { ...state.products[idx], ...data };
+    if (idx >= 0) {
+      state.products[idx] = { ...state.products[idx], ...data };
+      await dbUpdateProduct(state.products[idx]);
+    }
     showToast('Product updated');
   } else {
-    state.products.push({ id: generateId(), ...data });
+    const product = { id: generateId(), ...data };
+    state.products.push(product);
+    await dbInsertProduct(product);
     showToast('Product added');
   }
-  saveState(); closeModal('product'); renderAll();
+  closeModal('product'); renderAll();
 }
 
 function editProduct(id) {
@@ -879,11 +1114,14 @@ function deleteProduct(id) {
   document.getElementById('confirm-delete-name').textContent = p ? p.name : 'this product';
   document.getElementById('modal-confirm-delete').classList.add('active');
 }
-function confirmDeleteProduct() {
+async function confirmDeleteProduct() {
   if (!pendingDeleteProduct) return;
-  state.products = state.products.filter(p => p.id !== pendingDeleteProduct);
-  state.transactions = state.transactions.filter(t => t.productId !== pendingDeleteProduct);
-  pendingDeleteProduct = null; saveState(); closeModal('confirm-delete'); renderAll(); showToast('Product deleted');
+  if (!checkOnline('delete')) return;
+  const id = pendingDeleteProduct;
+  state.products = state.products.filter(p => p.id !== id);
+  state.transactions = state.transactions.filter(t => t.productId !== id);
+  await dbDeleteProduct(id);
+  pendingDeleteProduct = null; closeModal('confirm-delete'); renderAll(); showToast('Product deleted');
 }
 function cancelDeleteProduct() { pendingDeleteProduct = null; closeModal('confirm-delete'); }
 
@@ -894,7 +1132,8 @@ function populateProductDropdown() {
   sel.innerHTML = sorted.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
 }
 
-function saveTransaction() {
+async function saveTransaction() {
+  if (!checkOnline('save')) return;
   const productId = document.getElementById('txn-product').value;
   if (!productId) { showToast('Add a product first'); return; }
   const type = document.getElementById('txn-type').value;
@@ -907,21 +1146,26 @@ function saveTransaction() {
   }
   const tax = type === 'open' ? 0 : getComputedTax();
   const fees = type === 'open' ? 0 : (parseFloat(document.getElementById('txn-fees').value) || 0);
-  state.transactions.push({
+  const txn = {
     id: generateId(), productId, type,
     date: document.getElementById('txn-date').value, qty, unitPrice, tax, fees,
     notes: document.getElementById('txn-notes').value.trim(),
-  });
-  saveState(); closeModal('transaction'); renderAll();
+  };
+  state.transactions.push(txn);
+  await dbInsertTransaction(txn);
+  closeModal('transaction'); renderAll();
   showToast(`${{ buy: 'Purchase', sell: 'Sale', open: 'Opened' }[type]} logged`);
 }
 
 let pendingDeleteTxn = null;
 function deleteTransaction(id) { pendingDeleteTxn = id; document.getElementById('modal-confirm-delete-txn').classList.add('active'); }
-function confirmDeleteTransaction() {
+async function confirmDeleteTransaction() {
   if (!pendingDeleteTxn) return;
-  state.transactions = state.transactions.filter(t => t.id !== pendingDeleteTxn);
-  pendingDeleteTxn = null; saveState(); closeModal('confirm-delete-txn'); renderAll(); showToast('Transaction deleted');
+  if (!checkOnline('delete')) return;
+  const id = pendingDeleteTxn;
+  state.transactions = state.transactions.filter(t => t.id !== id);
+  await dbDeleteTransaction(id);
+  pendingDeleteTxn = null; closeModal('confirm-delete-txn'); renderAll(); showToast('Transaction deleted');
 }
 function cancelDeleteTransaction() { pendingDeleteTxn = null; closeModal('confirm-delete-txn'); }
 
@@ -1023,6 +1267,10 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 document.getElementById('txn-qty')?.addEventListener('input', updateTaxPreview);
 document.getElementById('txn-price')?.addEventListener('input', updateTaxPreview);
 
+// Allow Enter to submit login
+document.getElementById('auth-password')?.addEventListener('keydown', e => { if (e.key === 'Enter') handleSignIn(); });
+document.getElementById('auth-email')?.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('auth-password').focus(); });
+
 // ============ BARCODE SCANNER ============
 let scannerCallback = null, scannerActive = false;
 
@@ -1100,9 +1348,106 @@ function scanForProductField() {
   });
 }
 
+// ============ AUTH ============
+function showScreen(screen) {
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('auth-screen').style.display = screen === 'auth' ? 'flex' : 'none';
+  document.getElementById('app-container').style.display = screen === 'app' ? 'block' : 'none';
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.classList.toggle('show', !!msg);
+}
+
+function showLoginForm() {
+  document.getElementById('auth-form-login').style.display = 'block';
+  document.getElementById('auth-form-reset').style.display = 'none';
+  showAuthError('');
+}
+
+async function handleSignIn() {
+  showAuthError('');
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if (!email || !password) { showAuthError('Email and password are required.'); return; }
+
+  const btn = document.getElementById('auth-signin-btn');
+  btn.disabled = true;
+  btn.textContent = 'Signing in...';
+
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) { showAuthError(error.message); btn.disabled = false; btn.textContent = 'Sign In'; return; }
+    // Auth state change listener handles the rest
+  } catch (err) {
+    showAuthError('Sign-in failed. Check your connection.');
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+  }
+}
+
+async function handleSignOut() {
+  await sb.auth.signOut();
+  state = { products: [], transactions: [] };
+  showScreen('auth');
+}
+
+function handleForgotPassword() {
+  document.getElementById('auth-form-login').style.display = 'none';
+  document.getElementById('auth-form-reset').style.display = 'block';
+  document.getElementById('auth-reset-email').value = document.getElementById('auth-email').value;
+  showAuthError('');
+}
+
+async function handleSendReset() {
+  const email = document.getElementById('auth-reset-email').value.trim();
+  if (!email) { showAuthError('Enter your email address.'); return; }
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  });
+  if (error) { showAuthError(error.message); return; }
+  showAuthError('');
+  showLoginForm();
+  showToast('Password reset email sent! Check your inbox.');
+}
+
+async function onAuthenticated() {
+  showScreen('app');
+  updateOfflineBanner();
+  await loadStateFromSupabase();
+  renderAll();
+}
+
 // ============ INIT ============
-loadState();
-renderAll();
+(async function init() {
+  // Check for existing session with a timeout so we don't hang
+  try {
+    const sessionPromise = sb.auth.getSession();
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000));
+    const { data } = await Promise.race([sessionPromise, timeoutPromise]);
+    if (data?.session) {
+      await onAuthenticated();
+      return;
+    }
+  } catch (e) {
+    console.warn('Session check failed or timed out:', e);
+  }
+  showScreen('auth');
+})();
+
+// Listen for auth state changes (handles sign-in, sign-out, token refresh)
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'SIGNED_IN' && session) {
+    await onAuthenticated();
+  } else if (event === 'SIGNED_OUT') {
+    state = { products: [], transactions: [] };
+    showScreen('auth');
+    const btn = document.getElementById('auth-signin-btn');
+    if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; }
+  }
+});
 </script>
 </body>
 </html>
