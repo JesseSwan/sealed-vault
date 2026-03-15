@@ -943,19 +943,27 @@ async function handleImport(event) {
     showToast(`Importing ${data.products.length} products & ${data.transactions.length} transactions...`);
     let pOk = 0, pFail = 0, tOk = 0, tFail = 0;
 
-    // Import products (delete existing + insert to avoid RLS conflicts)
+    // Build a map from old product ID -> new product ID
+    const productIdMap = {};
     for (const p of data.products) {
-      const dbRow = productToDb(p);
-      // Delete any existing row with this ID owned by current user (ignore errors)
-      await sb.from('products').delete().eq('id', p.id);
+      productIdMap[p.id] = generateId();
+    }
+
+    // Import products with new IDs
+    for (const p of data.products) {
+      const newProduct = Object.assign({}, p, { id: productIdMap[p.id] });
+      const dbRow = productToDb(newProduct);
       const { error } = await sb.from('products').insert(dbRow);
       if (error) { console.error('Import product error:', error.message, error); pFail++; }
       else { pOk++; }
     }
-    // Import transactions (delete existing + insert to avoid RLS conflicts)
+    // Import transactions with new IDs and remapped productId
     for (const t of data.transactions) {
-      const dbRow = txnToDb(t);
-      await sb.from('transactions').delete().eq('id', t.id);
+      const newTxn = Object.assign({}, t, {
+        id: generateId(),
+        productId: productIdMap[t.productId] || t.productId
+      });
+      const dbRow = txnToDb(newTxn);
       const { error } = await sb.from('transactions').insert(dbRow);
       if (error) { console.error('Import txn error:', error.message, error); tFail++; }
       else { tOk++; }
