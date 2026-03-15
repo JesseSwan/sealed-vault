@@ -773,6 +773,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ============ DATA STORE ============
 let state = { products: [], transactions: [] };
+let currentUserId = null;
 
 // ============ SORT STATE ============
 let sortState = { holdings: { key: null, dir: 'asc' }, products: { key: null, dir: 'asc' }, txn: { key: null, dir: 'desc' } };
@@ -836,17 +837,13 @@ function checkOnline(action) {
 }
 
 // ============ FIELD MAPPING: local <-> DB ============
-function getCurrentUserId() {
-  return sb.auth.getUser ? sb.auth.getSession().then(s => s?.data?.session?.user?.id) : null;
-}
-
-function productToDb(p, userId) {
+function productToDb(p) {
   const row = {
     id: p.id, name: p.name, upc: p.upc || null, category: p.category,
     set_name: p.set || null, msrp: p.msrp || 0, market_price: p.marketPrice || 0,
     backstock_target: p.backstockTarget || 0
   };
-  if (userId) row.user_id = userId;
+  if (currentUserId) row.user_id = currentUserId;
   return row;
 }
 
@@ -859,13 +856,13 @@ function productFromDb(row) {
   };
 }
 
-function txnToDb(t, userId) {
+function txnToDb(t) {
   const row = {
     id: t.id, product_id: t.productId, type: t.type, date: t.date,
     qty: t.qty, unit_price: t.unitPrice || 0, tax: t.tax || 0,
     fees: t.fees || 0, notes: t.notes || null
   };
-  if (userId) row.user_id = userId;
+  if (currentUserId) row.user_id = currentUserId;
   return row;
 }
 
@@ -932,50 +929,48 @@ function importData() {
 
 async function handleImport(event) {
   const file = event.target.files[0];
+  event.target.value = ''; // reset so same file can be re-selected
   if (!file) return;
-  if (!checkOnline('import')) { event.target.value = ''; return; }
-  const reader = new FileReader();
-  reader.onload = async function(e) {
-    try {
-      const data = JSON.parse(e.target.result);
-      if (!data.products || !data.transactions) { showToast('Invalid file format'); return; }
+  if (!checkOnline('import')) return;
+  if (!currentUserId) { showToast('Not signed in — please sign in first'); return; }
 
-      // Get current user ID for RLS
-      const { data: sessionData } = await sb.auth.getSession();
-      const userId = sessionData?.session?.user?.id;
-      if (!userId) { showToast('Not signed in — please sign in first'); return; }
+  showToast('Reading file...');
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if (!data.products || !data.transactions) { showToast('Invalid file format — need products & transactions'); return; }
 
-      showToast('Importing data...');
-      let pOk = 0, pFail = 0, tOk = 0, tFail = 0;
+    showToast(`Importing ${data.products.length} products & ${data.transactions.length} transactions...`);
+    let pOk = 0, pFail = 0, tOk = 0, tFail = 0;
 
-      // Upsert products
-      for (const p of data.products) {
-        const dbRow = productToDb(p, userId);
-        const { error } = await sb.from('products').upsert(dbRow, { onConflict: 'id' });
-        if (error) { console.error('Upsert product error:', error); pFail++; }
-        else { pOk++; }
-      }
-      // Upsert transactions
-      for (const t of data.transactions) {
-        const dbRow = txnToDb(t, userId);
-        const { error } = await sb.from('transactions').upsert(dbRow, { onConflict: 'id' });
-        if (error) { console.error('Upsert txn error:', error); tFail++; }
-        else { tOk++; }
-      }
-      // Reload from DB to get canonical state
-      await loadStateFromSupabase();
-      renderAll();
+    // Upsert products
+    for (const p of data.products) {
+      const dbRow = productToDb(p);
+      const { error } = await sb.from('products').upsert(dbRow, { onConflict: 'id' });
+      if (error) { console.error('Upsert product error:', error.message, error); pFail++; }
+      else { pOk++; }
+    }
+    // Upsert transactions
+    for (const t of data.transactions) {
+      const dbRow = txnToDb(t);
+      const { error } = await sb.from('transactions').upsert(dbRow, { onConflict: 'id' });
+      if (error) { console.error('Upsert txn error:', error.message, error); tFail++; }
+      else { tOk++; }
+    }
+    // Reload from DB to get canonical state
+    await loadStateFromSupabase();
+    renderAll();
 
-      // Show detailed result
-      if (pFail === 0 && tFail === 0) {
-        showToast(`Imported ${pOk} products & ${tOk} transactions`);
-      } else {
-        showToast(`Import done: ${pOk}/${pOk+pFail} products, ${tOk}/${tOk+tFail} transactions (check console for errors)`);
-      }
-    } catch(err) { console.error('Import error:', err); showToast('Error reading file: ' + err.message); }
-  };
-  reader.readAsText(file);
-  event.target.value = '';
+    // Show detailed result
+    if (pFail === 0 && tFail === 0) {
+      showToast(`Imported ${pOk} products & ${tOk} transactions`);
+    } else {
+      showToast(`Partial import: ${pOk}/${pOk+pFail} products, ${tOk}/${tOk+tFail} txns succeeded`);
+    }
+  } catch(err) {
+    console.error('Import error:', err);
+    showToast('Import failed: ' + err.message);
+  }
 }
 
 // ============ FILTER HELPERS ============
@@ -1413,9 +1408,18 @@ async function handleSignIn() {
 }
 
 async function handleSignOut() {
-  await sb.auth.signOut();
+  const btn = event?.target;
+  if (btn) { btn.disabled = true; btn.textContent = 'Signing out...'; }
+  try {
+    await sb.auth.signOut();
+  } catch (err) {
+    console.error('Sign out error:', err);
+  }
+  // Always clear state and go to auth screen, even if signOut call failed
+  currentUserId = null;
   state = { products: [], transactions: [] };
   showScreen('auth');
+  if (btn) { btn.disabled = false; btn.textContent = 'Sign Out'; }
 }
 
 function handleForgotPassword() {
@@ -1438,6 +1442,11 @@ async function handleSendReset() {
 }
 
 async function onAuthenticated() {
+  // Cache user ID for DB writes
+  try {
+    const { data } = await sb.auth.getSession();
+    currentUserId = data?.session?.user?.id || null;
+  } catch (e) { console.warn('Could not get user ID:', e); }
   showScreen('app');
   updateOfflineBanner();
   await loadStateFromSupabase();
