@@ -379,6 +379,52 @@ select.form-input {
   td, th { padding: 10px 12px; font-size: 12px; }
 }
 
+/* TCGPlayer Link Modal */
+.tcglink-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input);
+}
+.tcglink-item {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.tcglink-item:last-child { border-bottom: none; }
+.tcglink-item:hover { background: var(--bg-card-hover); }
+.tcglink-item-name { font-size: 14px; font-weight: 500; }
+.tcglink-item-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.tcglink-empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
+.price-source { display: inline-flex; align-items: center; gap: 4px; }
+.price-source a { color: var(--blue); font-size: 11px; text-decoration: none; }
+.price-source a:hover { text-decoration: underline; }
+.price-source .price-stale { color: var(--orange); font-size: 11px; }
+.price-linked-badge { font-size: 11px; color: var(--green); font-weight: 500; }
+.btn-link-tcg {
+  background: var(--blue-dim);
+  border: 1px solid var(--blue);
+  color: var(--blue);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.btn-link-tcg:hover { background: var(--blue); color: var(--bg-primary); }
+.btn-unlink {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-family: inherit;
+}
+.btn-unlink:hover { color: var(--red); }
+
 /* Auth / Login Screen */
 .auth-screen {
   display: flex;
@@ -509,6 +555,7 @@ select.form-input {
   <div class="logo">SEALED VAULT <span>/ tracker</span></div>
   <div class="header-actions">
     <button class="btn btn-scan" onclick="openScanner()">⎘ Scan</button>
+    <button class="btn" onclick="refreshMarketPrices()">⟳ Refresh Prices</button>
     <button class="btn" onclick="importData()">↑ Import</button>
     <button class="btn" onclick="exportData()">↓ Export</button>
     <button class="btn" onclick="handleSignOut()" style="color:var(--text-secondary)">Sign Out</button>
@@ -649,7 +696,20 @@ select.form-input {
       </div>
       <div class="form-group">
         <label class="form-label">Market Price ($)</label>
-        <input class="form-input" id="product-market" type="number" step="0.01" placeholder="0.00">
+        <div id="product-market-manual">
+          <input class="form-input" id="product-market" type="number" step="0.01" placeholder="0.00">
+        </div>
+        <div id="product-market-linked" style="display:none">
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 0">
+            <span class="mono" style="font-size:16px;font-weight:600" id="product-market-display"></span>
+            <a id="product-market-tcglink" href="#" target="_blank" style="color:var(--blue);font-size:12px">TCGPlayer</a>
+            <button type="button" class="btn-unlink" onclick="unlinkTcgPlayer(document.getElementById('product-edit-id').value)">unlink</button>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted)" id="product-market-updated"></div>
+        </div>
+        <div style="margin-top:6px">
+          <button type="button" class="btn-link-tcg" id="product-link-tcg-btn" onclick="openTcgLinkModal(document.getElementById('product-edit-id').value)">Link to TCGPlayer</button>
+        </div>
       </div>
     </div>
     <div class="form-group">
@@ -757,6 +817,42 @@ select.form-input {
   </div>
 </div>
 
+<!-- TCGPLAYER LINK MODAL -->
+<div class="modal-overlay" id="modal-tcglink">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-title">Link to TCGPlayer</div>
+    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px" id="tcglink-product-label"></p>
+
+    <!-- Step 1: Pick a set -->
+    <div id="tcglink-step-set">
+      <div class="form-group">
+        <label class="form-label">Search Sets</label>
+        <input class="form-input" id="tcglink-set-search" placeholder="e.g. Prismatic Evolutions" oninput="filterTcgSets()">
+      </div>
+      <div class="tcglink-list" id="tcglink-set-list"></div>
+    </div>
+
+    <!-- Step 2: Pick a product -->
+    <div id="tcglink-step-product" style="display:none">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <button class="btn btn-sm" onclick="tcgLinkBackToSets()">Back</button>
+        <span style="color:var(--text-secondary);font-size:13px" id="tcglink-set-label"></span>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Search Products</label>
+        <input class="form-input" id="tcglink-product-search" placeholder="e.g. Elite Trainer Box" oninput="filterTcgProducts()">
+      </div>
+      <div class="tcglink-list" id="tcglink-product-list"></div>
+    </div>
+
+    <div id="tcglink-loading" style="display:none;text-align:center;padding:24px;color:var(--text-secondary)">Loading...</div>
+
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('tcglink')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- HIDDEN FILE INPUT -->
 <input type="file" id="file-import" accept=".json" style="display:none" onchange="handleImport(event)">
 
@@ -841,7 +937,10 @@ function productToDb(p) {
   const row = {
     id: p.id, name: p.name, upc: p.upc || null, category: p.category,
     set_name: p.set || null, msrp: p.msrp || 0, market_price: p.marketPrice || 0,
-    backstock_target: p.backstockTarget || 0
+    backstock_target: p.backstockTarget || 0,
+    tcgplayer_product_id: p.tcgplayerProductId || null,
+    tcgplayer_group_id: p.tcgplayerGroupId || null,
+    price_updated_at: p.priceUpdatedAt || null
   };
   if (currentUserId) row.user_id = currentUserId;
   return row;
@@ -852,7 +951,10 @@ function productFromDb(row) {
     id: row.id, name: row.name, upc: row.upc || '', category: row.category,
     set: row.set_name || '', msrp: parseFloat(row.msrp) || 0,
     marketPrice: parseFloat(row.market_price) || 0,
-    backstockTarget: parseInt(row.backstock_target) || 0
+    backstockTarget: parseInt(row.backstock_target) || 0,
+    tcgplayerProductId: row.tcgplayer_product_id || null,
+    tcgplayerGroupId: row.tcgplayer_group_id || null,
+    priceUpdatedAt: row.price_updated_at || null
   };
 }
 
@@ -984,6 +1086,92 @@ async function handleImport(event) {
   }
 }
 
+// ============ TCGCSV API ============
+const TCGCSV_BASE = 'https://tcgcsv.com/tcgplayer';
+const TCGCSV_POKEMON_CAT = 3;
+
+async function fetchTcgGroups() {
+  const cacheKey = 'tcgcsv_groups';
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    const { data, ts } = JSON.parse(cached);
+    if (Date.now() - ts < 7 * 24 * 60 * 60 * 1000) return data;
+  }
+  const res = await fetch(`${TCGCSV_BASE}/${TCGCSV_POKEMON_CAT}/groups`);
+  if (!res.ok) throw new Error('Failed to fetch sets');
+  const json = await res.json();
+  const groups = json.results || json;
+  localStorage.setItem(cacheKey, JSON.stringify({ data: groups, ts: Date.now() }));
+  return groups;
+}
+
+async function fetchTcgProducts(groupId) {
+  const cacheKey = `tcgcsv_products_${groupId}`;
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    const { data, ts } = JSON.parse(cached);
+    if (Date.now() - ts < 24 * 60 * 60 * 1000) return data;
+  }
+  const res = await fetch(`${TCGCSV_BASE}/${TCGCSV_POKEMON_CAT}/${groupId}/products`);
+  if (!res.ok) throw new Error('Failed to fetch products');
+  const json = await res.json();
+  const products = json.results || json;
+  localStorage.setItem(cacheKey, JSON.stringify({ data: products, ts: Date.now() }));
+  return products;
+}
+
+async function fetchTcgPrices(groupId) {
+  const res = await fetch(`${TCGCSV_BASE}/${TCGCSV_POKEMON_CAT}/${groupId}/prices`);
+  if (!res.ok) throw new Error('Failed to fetch prices');
+  const json = await res.json();
+  return json.results || json;
+}
+
+async function refreshMarketPrices() {
+  const linked = state.products.filter(p => p.tcgplayerProductId && p.tcgplayerGroupId);
+  if (!linked.length) return;
+  const groupIds = [...new Set(linked.map(p => p.tcgplayerGroupId))];
+  let updated = 0;
+  for (const gid of groupIds) {
+    try {
+      const prices = await fetchTcgPrices(gid);
+      const priceMap = {};
+      prices.forEach(p => {
+        if (!priceMap[p.productId] || p.subTypeName === 'Normal') {
+          priceMap[p.productId] = p.marketPrice || p.midPrice || p.lowPrice || 0;
+        }
+      });
+      for (const product of linked.filter(p => p.tcgplayerGroupId === gid)) {
+        const price = priceMap[product.tcgplayerProductId];
+        if (price != null && price > 0) {
+          product.marketPrice = price;
+          product.priceUpdatedAt = new Date().toISOString();
+          await dbUpdateProduct(product);
+          updated++;
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to fetch prices for group ${gid}:`, err);
+    }
+  }
+  if (updated > 0) {
+    renderAll();
+    showToast(`Updated ${updated} market price${updated > 1 ? 's' : ''}`);
+  }
+}
+
+async function checkAndRefreshPrices() {
+  const linked = state.products.filter(p => p.tcgplayerProductId);
+  if (!linked.length) return;
+  const staleThreshold = 24 * 60 * 60 * 1000;
+  const hasStale = linked.some(p => !p.priceUpdatedAt || (Date.now() - new Date(p.priceUpdatedAt).getTime()) > staleThreshold);
+  if (hasStale) await refreshMarketPrices();
+}
+
+function getTcgplayerUrl(productId) {
+  return `https://www.tcgplayer.com/product/${productId}`;
+}
+
 // ============ FILTER HELPERS ============
 function getUniqueCategories() { return [...new Set(state.products.map(p => p.category))].sort(); }
 function getUniqueSets() { return [...new Set(state.products.map(p => p.set).filter(Boolean))].sort(); }
@@ -1068,7 +1256,8 @@ function switchTab(tab) {
 function openModal(type, isEdit) {
   document.getElementById(`modal-${type}`).classList.add('active');
   if (type === 'transaction') { populateProductDropdown(); document.getElementById('txn-date').value = new Date().toISOString().slice(0, 10); setTaxMode('dollar'); onTxnTypeChange(); }
-  if (type === 'product' && !isEdit) { clearProductForm(); document.getElementById('product-modal-title').textContent = 'Add Product'; }
+  if (type === 'product' && !isEdit) { clearProductForm(); document.getElementById('product-modal-title').textContent = 'Add Product'; document.getElementById('product-link-tcg-btn').style.display = 'none'; }
+  if (type === 'product' && isEdit) { document.getElementById('product-link-tcg-btn').style.display = 'inline-block'; }
 }
 
 function closeModal(type) {
@@ -1082,6 +1271,10 @@ function clearProductForm() {
   document.getElementById('product-category').value = 'ETB';
   document.getElementById('product-backstock').value = '1';
   document.getElementById('product-edit-id').value = '';
+  document.getElementById('product-market-manual').style.display = 'block';
+  document.getElementById('product-market-linked').style.display = 'none';
+  document.getElementById('product-link-tcg-btn').textContent = 'Link to TCGPlayer';
+  document.getElementById('product-link-tcg-btn').style.display = 'none';
 }
 
 function clearTransactionForm() {
@@ -1099,12 +1292,14 @@ async function saveProduct() {
   const name = document.getElementById('product-name').value.trim();
   if (!name) { showToast('Product name required'); return; }
   const editId = document.getElementById('product-edit-id').value;
+  const existingProduct = editId ? state.products.find(p => p.id === editId) : null;
+  const isLinked = existingProduct && existingProduct.tcgplayerProductId;
   const data = {
     name, upc: document.getElementById('product-upc').value.trim(),
     category: document.getElementById('product-category').value,
     set: document.getElementById('product-set').value.trim(),
     msrp: parseFloat(document.getElementById('product-msrp').value) || 0,
-    marketPrice: parseFloat(document.getElementById('product-market').value) || 0,
+    marketPrice: isLinked ? existingProduct.marketPrice : (parseFloat(document.getElementById('product-market').value) || 0),
     backstockTarget: parseInt(document.getElementById('product-backstock').value) || 0,
   };
   if (editId) {
@@ -1132,9 +1327,24 @@ function editProduct(id) {
   document.getElementById('product-category').value = p.category;
   document.getElementById('product-set').value = p.set || '';
   document.getElementById('product-msrp').value = p.msrp || '';
-  document.getElementById('product-market').value = p.marketPrice || '';
   document.getElementById('product-backstock').value = p.backstockTarget || 0;
+  updateProductMarketUI(p);
   openModal('product', true);
+}
+
+function updateProductMarketUI(product) {
+  const isLinked = !!product.tcgplayerProductId;
+  document.getElementById('product-market-manual').style.display = isLinked ? 'none' : 'block';
+  document.getElementById('product-market-linked').style.display = isLinked ? 'block' : 'none';
+  document.getElementById('product-link-tcg-btn').textContent = isLinked ? 'Re-link to TCGPlayer' : 'Link to TCGPlayer';
+  if (isLinked) {
+    document.getElementById('product-market-display').textContent = product.marketPrice ? fmt(product.marketPrice) : '—';
+    document.getElementById('product-market-tcglink').href = getTcgplayerUrl(product.tcgplayerProductId);
+    const updatedAt = product.priceUpdatedAt ? new Date(product.priceUpdatedAt) : null;
+    document.getElementById('product-market-updated').textContent = updatedAt ? `Updated ${updatedAt.toLocaleDateString()} ${updatedAt.toLocaleTimeString()}` : 'Not yet fetched';
+  } else {
+    document.getElementById('product-market').value = product.marketPrice || '';
+  }
 }
 
 let pendingDeleteProduct = null;
@@ -1248,7 +1458,13 @@ function renderProducts() {
     switch(key) { case 'name': return item.name.toLowerCase(); case 'category': return item.category.toLowerCase(); case 'msrp': return item.msrp; case 'market': return item.marketPrice||0; case 'onHand': return item.onHand; case 'backstockTarget': return item.backstockTarget; case 'surplus': return item.surplus; default: return 0; }
   });
   if (!rows.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-state-icon">🎴</div><div class="empty-state-text">${!state.products.length ? 'No products yet' : 'No matches'}</div></div></td></tr>`; return; }
-  tbody.innerHTML = rows.map(p => `<tr><td><strong>${p.name}</strong><br><span style="color:var(--text-muted);font-size:12px">${p.set||''}</span></td><td><span class="badge badge-blue">${p.category}</span></td><td class="mono">${fmt(p.msrp)}</td><td class="mono">${p.marketPrice ? fmt(p.marketPrice) : '—'}</td><td class="mono">${p.onHand}</td><td class="mono">${p.backstockTarget}</td><td>${p.surplus > 0 ? `<span class="badge badge-yellow">${p.surplus}</span>` : p.surplus === 0 ? `<span class="badge badge-green">met</span>` : `<span class="badge badge-red">${p.surplus}</span>`}</td><td><button class="btn btn-ghost btn-sm" onclick="editProduct('${p.id}')">edit</button> <button class="btn btn-sm btn-danger" style="border-color:var(--red)" onclick="deleteProduct('${p.id}')">delete</button></td></tr>`).join('');
+  tbody.innerHTML = rows.map(p => {
+    const priceCell = p.marketPrice ? (p.tcgplayerProductId
+      ? `<span class="price-source">${fmt(p.marketPrice)} <a href="${getTcgplayerUrl(p.tcgplayerProductId)}" target="_blank">TCG</a></span>`
+      : fmt(p.marketPrice))
+      : '—';
+    return `<tr><td><strong>${p.name}</strong><br><span style="color:var(--text-muted);font-size:12px">${p.set||''}</span></td><td><span class="badge badge-blue">${p.category}</span></td><td class="mono">${fmt(p.msrp)}</td><td class="mono">${priceCell}</td><td class="mono">${p.onHand}</td><td class="mono">${p.backstockTarget}</td><td>${p.surplus > 0 ? `<span class="badge badge-yellow">${p.surplus}</span>` : p.surplus === 0 ? `<span class="badge badge-green">met</span>` : `<span class="badge badge-red">${p.surplus}</span>`}</td><td><button class="btn btn-ghost btn-sm" onclick="editProduct('${p.id}')">edit</button> <button class="btn btn-sm btn-danger" style="border-color:var(--red)" onclick="deleteProduct('${p.id}')">delete</button></td></tr>`;
+  }).join('');
 }
 
 function renderTransactions() {
@@ -1378,6 +1594,128 @@ function scanForProductField() {
   });
 }
 
+// ============ TCGPLAYER LINK ============
+let tcgLinkProductId = null;
+let tcgLinkGroups = [];
+let tcgLinkProducts = [];
+
+async function openTcgLinkModal(productId) {
+  tcgLinkProductId = productId;
+  const product = state.products.find(p => p.id === productId);
+  if (!product) return;
+  document.getElementById('tcglink-product-label').textContent = `Linking: ${product.name}`;
+  document.getElementById('tcglink-step-set').style.display = 'block';
+  document.getElementById('tcglink-step-product').style.display = 'none';
+  document.getElementById('tcglink-set-search').value = product.set || '';
+  document.getElementById('modal-tcglink').classList.add('active');
+
+  // Load groups
+  document.getElementById('tcglink-loading').style.display = 'block';
+  document.getElementById('tcglink-step-set').style.display = 'none';
+  try {
+    tcgLinkGroups = await fetchTcgGroups();
+    tcgLinkGroups.sort((a, b) => (b.groupId || 0) - (a.groupId || 0));
+    document.getElementById('tcglink-step-set').style.display = 'block';
+    filterTcgSets();
+  } catch (err) {
+    showToast('Failed to load sets: ' + err.message);
+  }
+  document.getElementById('tcglink-loading').style.display = 'none';
+}
+
+function filterTcgSets() {
+  const search = (document.getElementById('tcglink-set-search').value || '').toLowerCase();
+  const filtered = search ? tcgLinkGroups.filter(g => (g.name || '').toLowerCase().includes(search)) : tcgLinkGroups;
+  const list = document.getElementById('tcglink-set-list');
+  if (!filtered.length) { list.innerHTML = '<div class="tcglink-empty">No sets found</div>'; return; }
+  const show = filtered.slice(0, 50);
+  list.innerHTML = show.map(g => `<div class="tcglink-item" onclick="selectTcgGroup(${g.groupId}, '${(g.name || '').replace(/'/g, "\\'")}')"><div class="tcglink-item-name">${g.name || 'Unknown'}</div></div>`).join('');
+  if (filtered.length > 50) list.innerHTML += `<div class="tcglink-empty">${filtered.length - 50} more — refine your search</div>`;
+}
+
+async function selectTcgGroup(groupId, groupName) {
+  document.getElementById('tcglink-step-set').style.display = 'none';
+  document.getElementById('tcglink-loading').style.display = 'block';
+  document.getElementById('tcglink-set-label').textContent = groupName;
+  document.getElementById('tcglink-product-search').value = '';
+  try {
+    tcgLinkProducts = await fetchTcgProducts(groupId);
+    tcgLinkProducts._groupId = groupId;
+    document.getElementById('tcglink-step-product').style.display = 'block';
+    filterTcgProducts();
+  } catch (err) {
+    showToast('Failed to load products: ' + err.message);
+    document.getElementById('tcglink-step-set').style.display = 'block';
+  }
+  document.getElementById('tcglink-loading').style.display = 'none';
+}
+
+function filterTcgProducts() {
+  const search = (document.getElementById('tcglink-product-search').value || '').toLowerCase();
+  let filtered = tcgLinkProducts;
+  if (search) filtered = filtered.filter(p => (p.name || '').toLowerCase().includes(search));
+  const list = document.getElementById('tcglink-product-list');
+  if (!filtered.length) { list.innerHTML = '<div class="tcglink-empty">No products found</div>'; return; }
+  const show = filtered.slice(0, 50);
+  list.innerHTML = show.map(p => {
+    const url = getTcgplayerUrl(p.productId);
+    return `<div class="tcglink-item" onclick="confirmTcgLink(${p.productId}, ${tcgLinkProducts._groupId})"><div class="tcglink-item-name">${p.name || 'Unknown'}</div><div class="tcglink-item-sub"><a href="${url}" target="_blank" onclick="event.stopPropagation()">View on TCGPlayer</a></div></div>`;
+  }).join('');
+  if (filtered.length > 50) list.innerHTML += `<div class="tcglink-empty">${filtered.length - 50} more — refine your search</div>`;
+}
+
+function tcgLinkBackToSets() {
+  document.getElementById('tcglink-step-product').style.display = 'none';
+  document.getElementById('tcglink-step-set').style.display = 'block';
+}
+
+async function confirmTcgLink(tcgProductId, tcgGroupId) {
+  if (!tcgLinkProductId) return;
+  const product = state.products.find(p => p.id === tcgLinkProductId);
+  if (!product) return;
+  product.tcgplayerProductId = tcgProductId;
+  product.tcgplayerGroupId = tcgGroupId;
+  await dbUpdateProduct(product);
+  closeModal('tcglink');
+  showToast('Linked to TCGPlayer — fetching price...');
+  // Fetch price immediately
+  try {
+    const prices = await fetchTcgPrices(tcgGroupId);
+    const match = prices.find(p => p.productId === tcgProductId && (p.subTypeName === 'Normal' || !p.subTypeName)) || prices.find(p => p.productId === tcgProductId);
+    if (match) {
+      const price = match.marketPrice || match.midPrice || match.lowPrice || 0;
+      if (price > 0) {
+        product.marketPrice = price;
+        product.priceUpdatedAt = new Date().toISOString();
+        await dbUpdateProduct(product);
+        showToast(`Market price updated: ${fmt(price)}`);
+      }
+    }
+  } catch (err) {
+    console.error('Price fetch after link failed:', err);
+  }
+  renderAll();
+  // Re-open product edit modal if it was open
+  if (document.getElementById('product-edit-id').value === tcgLinkProductId) {
+    editProduct(tcgLinkProductId);
+  }
+}
+
+async function unlinkTcgPlayer(productId) {
+  const product = state.products.find(p => p.id === productId);
+  if (!product) return;
+  product.tcgplayerProductId = null;
+  product.tcgplayerGroupId = null;
+  product.priceUpdatedAt = null;
+  await dbUpdateProduct(product);
+  renderAll();
+  showToast('Unlinked from TCGPlayer');
+  // Refresh the edit modal if open
+  if (document.getElementById('product-edit-id').value === productId) {
+    editProduct(productId);
+  }
+}
+
 // ============ AUTH ============
 function showScreen(screen) {
   document.getElementById('loading-screen').style.display = 'none';
@@ -1462,6 +1800,8 @@ async function onAuthenticated() {
   updateOfflineBanner();
   await loadStateFromSupabase();
   renderAll();
+  // Auto-refresh stale market prices in background
+  if (!isOffline()) checkAndRefreshPrices().catch(err => console.error('Price refresh error:', err));
 }
 
 // ============ INIT ============
