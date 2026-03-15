@@ -511,7 +511,7 @@ select.form-input {
     <button class="btn btn-scan" onclick="openScanner()">⎘ Scan</button>
     <button class="btn" onclick="importData()">↑ Import</button>
     <button class="btn" onclick="exportData()">↓ Export</button>
-    <button class="btn" onclick="handleSignOut()" style="color:var(--text-muted)">Sign Out</button>
+    <button class="btn" onclick="handleSignOut()" style="color:var(--text-secondary)">Sign Out</button>
   </div>
 </header>
 
@@ -836,12 +836,18 @@ function checkOnline(action) {
 }
 
 // ============ FIELD MAPPING: local <-> DB ============
-function productToDb(p) {
-  return {
+function getCurrentUserId() {
+  return sb.auth.getUser ? sb.auth.getSession().then(s => s?.data?.session?.user?.id) : null;
+}
+
+function productToDb(p, userId) {
+  const row = {
     id: p.id, name: p.name, upc: p.upc || null, category: p.category,
     set_name: p.set || null, msrp: p.msrp || 0, market_price: p.marketPrice || 0,
     backstock_target: p.backstockTarget || 0
   };
+  if (userId) row.user_id = userId;
+  return row;
 }
 
 function productFromDb(row) {
@@ -853,12 +859,14 @@ function productFromDb(row) {
   };
 }
 
-function txnToDb(t) {
-  return {
+function txnToDb(t, userId) {
+  const row = {
     id: t.id, product_id: t.productId, type: t.type, date: t.date,
     qty: t.qty, unit_price: t.unitPrice || 0, tax: t.tax || 0,
     fees: t.fees || 0, notes: t.notes || null
   };
+  if (userId) row.user_id = userId;
+  return row;
 }
 
 function txnFromDb(row) {
@@ -931,24 +939,40 @@ async function handleImport(event) {
     try {
       const data = JSON.parse(e.target.result);
       if (!data.products || !data.transactions) { showToast('Invalid file format'); return; }
+
+      // Get current user ID for RLS
+      const { data: sessionData } = await sb.auth.getSession();
+      const userId = sessionData?.session?.user?.id;
+      if (!userId) { showToast('Not signed in — please sign in first'); return; }
+
       showToast('Importing data...');
+      let pOk = 0, pFail = 0, tOk = 0, tFail = 0;
+
       // Upsert products
       for (const p of data.products) {
-        const dbRow = productToDb(p);
+        const dbRow = productToDb(p, userId);
         const { error } = await sb.from('products').upsert(dbRow, { onConflict: 'id' });
-        if (error) console.error('Upsert product error:', error);
+        if (error) { console.error('Upsert product error:', error); pFail++; }
+        else { pOk++; }
       }
       // Upsert transactions
       for (const t of data.transactions) {
-        const dbRow = txnToDb(t);
+        const dbRow = txnToDb(t, userId);
         const { error } = await sb.from('transactions').upsert(dbRow, { onConflict: 'id' });
-        if (error) console.error('Upsert txn error:', error);
+        if (error) { console.error('Upsert txn error:', error); tFail++; }
+        else { tOk++; }
       }
       // Reload from DB to get canonical state
       await loadStateFromSupabase();
       renderAll();
-      showToast('Data imported successfully');
-    } catch(err) { console.error('Import error:', err); showToast('Error reading file'); }
+
+      // Show detailed result
+      if (pFail === 0 && tFail === 0) {
+        showToast(`Imported ${pOk} products & ${tOk} transactions`);
+      } else {
+        showToast(`Import done: ${pOk}/${pOk+pFail} products, ${tOk}/${tOk+tFail} transactions (check console for errors)`);
+      }
+    } catch(err) { console.error('Import error:', err); showToast('Error reading file: ' + err.message); }
   };
   reader.readAsText(file);
   event.target.value = '';
